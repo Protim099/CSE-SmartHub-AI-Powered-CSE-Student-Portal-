@@ -1,0 +1,11 @@
+@tailwind base; @tailwind components; @tailwind utilities;
+:root{--bg:210 25% 97%;--surface:0 0% 100%;--line:214 20% 87%;--ink:222 40% 12%;--muted:215 14% 38%;--brand:174 80% 24%;--brand-fg:0 0% 100%;--brand-soft:174 45% 93%;--signal:36 95% 44%;--danger:0 70% 42%;--ok:152 60% 28%}
+.dark{--bg:222 30% 8%;--surface:222 28% 11%;--line:222 18% 21%;--ink:210 20% 94%;--muted:215 14% 68%;--brand:172 62% 46%;--brand-fg:222 40% 8%;--brand-soft:172 35% 15%;--signal:38 92% 56%;--danger:0 80% 68%;--ok:152 55% 55%}
+@layer base{
+  *{@apply border-line}
+  body{@apply bg-bg text-ink font-sans antialiased}
+  h1,h2,h3{@apply font-display tracking-tight}
+  :focus-visible{@apply outline-none ring-2 ring-brand ring-offset-2 ring-offset-bg rounded-md}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.skeleton{@apply animate-pulse rounded-md bg-line/70}
