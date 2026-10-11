@@ -1,0 +1,342 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  FACULTY
+  ADMIN
+}
+
+enum NoticeCategory {
+  GENERAL
+  ACADEMIC
+  EXAM
+  EVENT
+  SCHOLARSHIP
+  LAB
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum ResourceType {
+  PDF
+  NOTES
+  SLIDES
+  LAB_MANUAL
+  LINK
+  PAST_PAPER
+}
+
+enum SubmissionStatus {
+  SUBMITTED
+  LATE
+  REVIEWED
+  NEEDS_REVISION
+}
+
+enum EventType {
+  EXAM
+  DEADLINE
+  EVENT
+  REMINDER
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(STUDENT)
+  isActive     Boolean  @default(true)
+  bio          String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  studentProfile StudentProfile?
+  facultyProfile FacultyProfile?
+  enrollments    Enrollment[]
+  taughtCourses  Course[]             @relation("Instructor")
+  notices        Notice[]
+  resources      Resource[]
+  assignments    Assignment[]
+  submissions    Submission[]         @relation("Submitter")
+  reviewed       Submission[]         @relation("Reviewer")
+  projects       Project[]
+  notifications  Notification[]
+  conversations  Conversation[]
+  auditLogs      AuditLog[]
+  events         CalendarEvent[]
+  resetTokens    PasswordResetToken[]
+
+  @@index([role])
+}
+
+model Department {
+  id       String           @id @default(cuid())
+  code     String           @unique
+  name     String
+  students StudentProfile[]
+  faculty  FacultyProfile[]
+  courses  Course[]
+}
+
+model StudentProfile {
+  id           String      @id @default(cuid())
+  userId       String      @unique
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  studentId    String      @unique
+  semester     Int
+  batch        String
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+}
+
+model FacultyProfile {
+  id           String      @id @default(cuid())
+  userId       String      @unique
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  designation  String
+  office       String?
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+}
+
+model Course {
+  id           String     @id @default(cuid())
+  code         String     @unique
+  title        String
+  description  String
+  syllabus     String
+  credits      Float
+  semester     Int
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+  instructorId String
+  instructor   User       @relation("Instructor", fields: [instructorId], references: [id])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  enrollments   Enrollment[]
+  notices       Notice[]
+  resources     Resource[]
+  assignments   Assignment[]
+  events        CalendarEvent[]
+  conversations Conversation[]
+
+  @@index([semester])
+  @@index([instructorId])
+}
+
+model Enrollment {
+  id        String   @id @default(cuid())
+  userId    String
+  courseId  String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, courseId])
+  @@index([courseId])
+}
+
+model Notice {
+  id             String         @id @default(cuid())
+  title          String
+  body           String
+  category       NoticeCategory @default(GENERAL)
+  priority       Priority       @default(NORMAL)
+  attachmentPath String?
+  attachmentName String?
+  publishedAt    DateTime       @default(now())
+  authorId       String
+  author         User           @relation(fields: [authorId], references: [id])
+  courseId       String?
+  course         Course?        @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([publishedAt])
+  @@index([category])
+}
+
+model Resource {
+  id          String          @id @default(cuid())
+  title       String
+  description String?
+  type        ResourceType
+  url         String?
+  filePath    String?
+  fileName    String?
+  content     String? // plain text used to build the AI index
+  isPublic    Boolean         @default(false)
+  courseId    String?
+  course      Course?         @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  uploaderId  String
+  uploader    User            @relation(fields: [uploaderId], references: [id])
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  chunks      DocumentChunk[]
+
+  @@index([courseId])
+  @@index([type])
+}
+
+model Assignment {
+  id          String       @id @default(cuid())
+  title       String
+  description String
+  dueAt       DateTime
+  maxMarks    Int          @default(100)
+  courseId    String
+  course      Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  creatorId   String
+  creator     User         @relation(fields: [creatorId], references: [id])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  submissions Submission[]
+
+  @@index([courseId])
+  @@index([dueAt])
+}
+
+model Submission {
+  id           String           @id @default(cuid())
+  assignmentId String
+  assignment   Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      User             @relation("Submitter", fields: [studentId], references: [id], onDelete: Cascade)
+  filePath     String
+  fileName     String
+  note         String?
+  status       SubmissionStatus @default(SUBMITTED)
+  feedback     String?
+  marks        Int? // set only by faculty; never generated
+  reviewerId   String?
+  reviewer     User?            @relation("Reviewer", fields: [reviewerId], references: [id])
+  submittedAt  DateTime         @default(now())
+  reviewedAt   DateTime?
+
+  @@unique([assignmentId, studentId])
+  @@index([studentId])
+}
+
+model Project {
+  id           String   @id @default(cuid())
+  title        String
+  description  String
+  technologies String[]
+  githubUrl    String?
+  demoUrl      String?
+  year         Int
+  ownerId      String
+  owner        User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@index([year])
+}
+
+model CalendarEvent {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  type        EventType
+  startsAt    DateTime
+  endsAt      DateTime?
+  courseId    String?
+  course      Course?   @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  creatorId   String
+  creator     User      @relation(fields: [creatorId], references: [id])
+
+  @@index([startsAt])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String?
+  href      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId  String?
+  course    Course?   @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  title     String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  messages  Message[]
+
+  @@index([userId, updatedAt])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           MessageRole
+  content        String
+  sources        Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model DocumentChunk {
+  id         String   @id @default(cuid())
+  resourceId String
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  position   Int
+  content    String
+  embedding  Float[]
+  createdAt  DateTime @default(now())
+
+  @@unique([resourceId, position])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  entityId  String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entity, entityId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
